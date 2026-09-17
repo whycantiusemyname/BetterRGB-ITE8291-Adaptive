@@ -109,7 +109,8 @@ static const GUID GUID_DEVINTERFACE_HID_LOCAL =
 #define MODE_CURRENT   13
 #define MODE_TOUCH_CURRENT 14
 #define MODE_SCREEN_AMBIENT 15
-#define MODE_COUNT    16
+#define MODE_CHECKERBOARD 16
+#define MODE_COUNT    17
 
 #define IDC_COMBO_MODE       200
 #define IDC_BTN_STOP         201
@@ -191,6 +192,10 @@ static const GUID GUID_DEVINTERFACE_HID_LOCAL =
 #define IDC_SLIDER_TCWIDTH    521
 #define IDC_SLIDER_AMBIENT_BLUR 522
 #define IDC_SLIDER_AMBIENT_RESPONSE 523
+#define IDC_SLIDER_CBSPEED    524
+#define IDC_SLIDER_CBHUE      525
+#define IDC_COMBO_CBPATTERN   526
+#define IDC_COMBO_CBDIRECTION 527
 #define IDC_COMBO_AC_TOUCHBAR_MODE 530
 #define IDC_COMBO_AC_TOUCHBAR_DIRECTION 531
 #define IDC_COMBO_BAT_TOUCHBAR_MODE 532
@@ -294,6 +299,18 @@ static volatile LONG g_rippleRandomMode = 1;
 static volatile LONG g_rippleSpeed = 5;
 static volatile LONG g_rippleWidth = 2;
 static volatile LONG g_rainbowSpeed = 6;
+
+#define CHECKER_PATTERN_CHECKER 0
+#define CHECKER_PATTERN_ROW 1
+#define CHECKER_PATTERN_COL 2
+#define CHECKER_DIR_OPPOSITE 0
+#define CHECKER_DIR_SAME 1
+#define CHECKER_DIR_COMPLEMENT 2
+static volatile LONG g_checkerSpeed = 6;
+static volatile LONG g_checkerPattern = CHECKER_PATTERN_CHECKER;
+static volatile LONG g_checkerDirection = CHECKER_DIR_OPPOSITE;
+static volatile LONG g_checkerHueOffset = 0;
+static HWND g_hComboCheckerPattern, g_hComboCheckerDirection, g_hLblCheckerHue;
 
 static volatile LONG g_quicksandSpeed = 5;
 static volatile LONG g_quicksandScale = 5;
@@ -457,6 +474,7 @@ static HWND g_panelQuicksand[MAX_PANEL_CTRLS]; static int g_panelQuicksandCount 
 static HWND g_panelCurrent[MAX_PANEL_CTRLS]; static int g_panelCurrentCount = 0;
 static HWND g_panelTouchCurrent[MAX_PANEL_CTRLS]; static int g_panelTouchCurrentCount = 0;
 static HWND g_panelScreenAmbient[MAX_PANEL_CTRLS]; static int g_panelScreenAmbientCount = 0;
+static HWND g_panelCheckerboard[MAX_PANEL_CTRLS]; static int g_panelCheckerboardCount = 0;
 
 #define MAX_UI_PAGE_CTRLS 40
 #define UI_PAGE_EFFECTS 0
@@ -580,6 +598,10 @@ void save_config(void) {
     fprintf(f, "rippleSpeed=%ld\n", (long)g_rippleSpeed);
     fprintf(f, "rippleWidth=%ld\n", (long)g_rippleWidth);
     fprintf(f, "rainbowSpeed=%ld\n", (long)g_rainbowSpeed);
+    fprintf(f, "checkerSpeed=%ld\n", (long)g_checkerSpeed);
+    fprintf(f, "checkerPattern=%ld\n", (long)g_checkerPattern);
+    fprintf(f, "checkerDirection=%ld\n", (long)g_checkerDirection);
+    fprintf(f, "checkerHue=%ld\n", (long)g_checkerHueOffset);
     fprintf(f, "quicksandSpeed=%ld\n", (long)g_quicksandSpeed);
     fprintf(f, "quicksandScale=%ld\n", (long)g_quicksandScale);
     for (int i = 0; i < 3; i++) fprintf(f, "quicksandColor%d=%ld\n", i, (long)g_quicksandColors[i]);
@@ -796,6 +818,10 @@ void load_config(void) {
         else if (!strcmp(key, "rippleSpeed")) g_rippleSpeed = cfg_clamp(v, 1, 10);
         else if (!strcmp(key, "rippleWidth")) g_rippleWidth = cfg_clamp(v, 1, 4);
         else if (!strcmp(key, "rainbowSpeed")) g_rainbowSpeed = cfg_clamp(v, 1, 20);
+        else if (!strcmp(key, "checkerSpeed")) g_checkerSpeed = cfg_clamp(v, 1, 20);
+        else if (!strcmp(key, "checkerPattern")) g_checkerPattern = cfg_clamp(v, CHECKER_PATTERN_CHECKER, CHECKER_PATTERN_COL);
+        else if (!strcmp(key, "checkerDirection")) g_checkerDirection = cfg_clamp(v, CHECKER_DIR_OPPOSITE, CHECKER_DIR_COMPLEMENT);
+        else if (!strcmp(key, "checkerHue")) g_checkerHueOffset = cfg_clamp(v, 0, 180);
         else if (!strcmp(key, "quicksandSpeed")) g_quicksandSpeed = cfg_clamp(v, 1, 10);
         else if (!strcmp(key, "quicksandScale")) g_quicksandScale = cfg_clamp(v, 1, 10);
         else if (!strncmp(key, "quicksandColor", 14) && key[14] >= '0' && key[14] <= '2' && !key[15]) g_quicksandColors[key[14] - '0'] = (COLORREF)v;
@@ -2057,6 +2083,47 @@ DWORD WINAPI effect_rainbow(LPVOID p) {
         unsigned char buf[BUF_SIZE] = {0};
         for (size_t i=0; i<KEYMAP_COUNT; i++)
             set_key(buf, KEYMAP[i].offset, r, g, b);
+        send_frame(buf);
+        pace_frame();
+    }
+    return 0;
+}
+
+/* 把整块键盘按奇偶分成两个镶嵌网格：每格各自单色，整体沿彩虹循环。
+   两格色相可反向（一个递增一个递减）、同向或相差 180 度互补。 */
+DWORD WINAPI effect_checkerboard(LPVOID p) {
+    (void)p;
+    double phase = 0.0;
+    ULONGLONG previousTick = GetTickCount64();
+    while (!g_stopFlag) {
+        ULONGLONG now = GetTickCount64();
+        double elapsedSeconds = (double)(now - previousTick) / 1000.0;
+        previousTick = now;
+        double degreesPerSecond = 4.0 + (double)g_checkerSpeed * 2.0;
+        phase = fmod(phase + elapsedSeconds * degreesPerSecond, 360.0);
+
+        LONG direction = g_checkerDirection;
+        double offset = (double)g_checkerHueOffset;
+        double hueB;
+        if (direction == CHECKER_DIR_SAME) hueB = phase + offset;
+        else if (direction == CHECKER_DIR_COMPLEMENT) hueB = phase + 180.0 + offset;
+        else hueB = offset - phase;
+
+        unsigned char ar, ag, ab, br, bg, bb;
+        hsv_to_rgb(phase, &ar, &ag, &ab);
+        hsv_to_rgb(hueB, &br, &bg, &bb);
+
+        LONG pattern = g_checkerPattern;
+        unsigned char buf[BUF_SIZE] = {0};
+        for (size_t i=0; i<KEYMAP_COUNT; i++) {
+            const KeyEntry *key = &KEYMAP[i];
+            int parity;
+            if (pattern == CHECKER_PATTERN_ROW) parity = key->row & 1;
+            else if (pattern == CHECKER_PATTERN_COL) parity = key->col & 1;
+            else parity = (key->row + key->col) & 1;
+            if (parity) set_key(buf, key->offset, br, bg, bb);
+            else set_key(buf, key->offset, ar, ag, ab);
+        }
         send_frame(buf);
         pace_frame();
     }
@@ -4029,6 +4096,7 @@ LPTHREAD_START_ROUTINE mode_to_fn(int mode) {
         case MODE_CURRENT: return effect_current;
         case MODE_TOUCH_CURRENT: return effect_touch_current;
         case MODE_SCREEN_AMBIENT: return effect_screen_ambient;
+        case MODE_CHECKERBOARD: return effect_checkerboard;
     }
     return NULL;
 }
@@ -4051,6 +4119,7 @@ const wchar_t* mode_to_label(int mode) {
         case MODE_CURRENT: return L"当前模式：电流";
         case MODE_TOUCH_CURRENT: return L"当前模式：触控电流";
         case MODE_SCREEN_AMBIENT: return L"当前模式：同步辨色";
+        case MODE_CHECKERBOARD: return L"当前模式：双格彩虹";
     }
     return L"当前模式：无";
 }
@@ -4073,6 +4142,7 @@ static const wchar_t* mode_to_name(int mode) {
         case MODE_CURRENT: return L"电流";
         case MODE_TOUCH_CURRENT: return L"触控电流";
         case MODE_SCREEN_AMBIENT: return L"同步辨色";
+        case MODE_CHECKERBOARD: return L"双格彩虹";
     }
     return L"关闭";
 }
@@ -4145,6 +4215,7 @@ void show_panel_for_mode(int mode) {
     show_only(g_panelCurrent, g_panelCurrentCount, visibleMode == MODE_CURRENT);
     show_only(g_panelTouchCurrent, g_panelTouchCurrentCount, visibleMode == MODE_TOUCH_CURRENT);
     show_only(g_panelScreenAmbient, g_panelScreenAmbientCount, visibleMode == MODE_SCREEN_AMBIENT);
+    show_only(g_panelCheckerboard, g_panelCheckerboardCount, visibleMode == MODE_CHECKERBOARD);
     HWND top = GetAncestor(g_panelBreath[0], GA_ROOT);
     if (top) { InvalidateRect(top, NULL, TRUE); UpdateWindow(top); }
 }
@@ -4819,6 +4890,35 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g_panelScreenAmbient[g_panelScreenAmbientCount++] = mk_label(hwnd,
                 L"线性光混色 + 空间模糊 + 时间平滑", 20, 285, 340, 25);
 
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_label(hwnd,
+                L"键盘按奇偶分为两个镶嵌网格，每格各自单色，整体沿彩虹循环；\n两格光谱方向相反时互相追逐。",
+                20, 105, 340, 40);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_label(hwnd, L"变色速度：", 20, 150, 150, 20);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_slider(hwnd, IDC_SLIDER_CBSPEED, 20, 170, 340, 30, 1, 20, g_checkerSpeed);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_label(hwnd, L"网格花样：", 20, 210, 200, 20);
+            g_hComboCheckerPattern = CreateWindow(L"COMBOBOX", L"", WS_CHILD|CBS_DROPDOWNLIST|WS_VSCROLL,
+                20, 230, 340, 110, hwnd, (HMENU)IDC_COMBO_CBPATTERN, NULL, NULL);
+            SendMessage(g_hComboCheckerPattern, CB_ADDSTRING, 0, (LPARAM)L"棋盘交错");
+            SendMessage(g_hComboCheckerPattern, CB_ADDSTRING, 0, (LPARAM)L"横向交替");
+            SendMessage(g_hComboCheckerPattern, CB_ADDSTRING, 0, (LPARAM)L"纵向交替");
+            SendMessage(g_hComboCheckerPattern, CB_SETCURSEL, (WPARAM)g_checkerPattern, 0);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = g_hComboCheckerPattern;
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_label(hwnd, L"光谱方向：", 20, 270, 200, 20);
+            g_hComboCheckerDirection = CreateWindow(L"COMBOBOX", L"", WS_CHILD|CBS_DROPDOWNLIST|WS_VSCROLL,
+                20, 290, 340, 110, hwnd, (HMENU)IDC_COMBO_CBDIRECTION, NULL, NULL);
+            SendMessage(g_hComboCheckerDirection, CB_ADDSTRING, 0, (LPARAM)L"两格反向");
+            SendMessage(g_hComboCheckerDirection, CB_ADDSTRING, 0, (LPARAM)L"两格同向");
+            SendMessage(g_hComboCheckerDirection, CB_ADDSTRING, 0, (LPARAM)L"互补色（相差180度）");
+            SendMessage(g_hComboCheckerDirection, CB_SETCURSEL, (WPARAM)g_checkerDirection, 0);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = g_hComboCheckerDirection;
+            {
+                wchar_t hueLabel[64];
+                wsprintf(hueLabel, L"两格色相偏移：%d 度", (int)g_checkerHueOffset);
+                g_hLblCheckerHue = mk_label(hwnd, hueLabel, 20, 330, 340, 20);
+            }
+            g_panelCheckerboard[g_panelCheckerboardCount++] = g_hLblCheckerHue;
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_slider(hwnd, IDC_SLIDER_CBHUE, 20, 350, 340, 30, 0, 180, g_checkerHueOffset);
+
             add_page_control(g_pageEffects, &g_pageEffectsCount,
                 mk_label(hwnd, L"当前灯效亮度：", 390, 125, 250, 20));
             g_hSliderBright = mk_slider(hwnd, IDC_SLIDER_BRIGHT, 390, 145, 310, 30, 0, 100, g_brightness);
@@ -5145,6 +5245,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RIPSPEED) g_rippleSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RIPWIDTH) g_rippleWidth = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RBWSPEED) g_rainbowSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_CBSPEED) g_checkerSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_CBHUE) {
+                g_checkerHueOffset = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+                wchar_t buf[64];
+                wsprintf(buf, L"两格色相偏移：%d 度", (int)g_checkerHueOffset);
+                SetWindowText(g_hLblCheckerHue, buf);
+            }
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_QSSPEED) g_quicksandSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_QSSCALE) g_quicksandScale = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_CURSPEED) g_currentSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
@@ -5226,6 +5333,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_batteryMode = cfg_clamp(sel - 1, -1, MODE_COUNT - 1);
                 if (g_autoPowerProfiles && !g_onAcPower) apply_power_profile(0, 1);
                 else save_config();
+                return 0;
+            }
+            if (HIWORD(wp) == CBN_SELCHANGE && (HWND)lp == g_hComboCheckerPattern) {
+                g_checkerPattern = cfg_clamp((LONG)SendMessage(g_hComboCheckerPattern, CB_GETCURSEL, 0, 0), CHECKER_PATTERN_CHECKER, CHECKER_PATTERN_COL);
+                save_config();
+                return 0;
+            }
+            if (HIWORD(wp) == CBN_SELCHANGE && (HWND)lp == g_hComboCheckerDirection) {
+                g_checkerDirection = cfg_clamp((LONG)SendMessage(g_hComboCheckerDirection, CB_GETCURSEL, 0, 0), CHECKER_DIR_OPPOSITE, CHECKER_DIR_COMPLEMENT);
+                save_config();
                 return 0;
             }
             if (HIWORD(wp) == CBN_SELCHANGE && (HWND)lp == g_hComboAcTouchbarMode) {
