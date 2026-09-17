@@ -109,7 +109,10 @@ static const GUID GUID_DEVINTERFACE_HID_LOCAL =
 #define MODE_CURRENT   13
 #define MODE_TOUCH_CURRENT 14
 #define MODE_SCREEN_AMBIENT 15
-#define MODE_COUNT    16
+#define MODE_CHECKERBOARD 16
+#define MODE_GRID_WAVE    17
+#define MODE_RANDOM_WAVE  18
+#define MODE_COUNT    19
 
 #define IDC_COMBO_MODE       200
 #define IDC_BTN_STOP         201
@@ -191,6 +194,23 @@ static const GUID GUID_DEVINTERFACE_HID_LOCAL =
 #define IDC_SLIDER_TCWIDTH    521
 #define IDC_SLIDER_AMBIENT_BLUR 522
 #define IDC_SLIDER_AMBIENT_RESPONSE 523
+#define IDC_SLIDER_CBSPEED    524
+#define IDC_SLIDER_CBHUE      525
+#define IDC_COMBO_CBPATTERN   526
+#define IDC_COMBO_CBDIRECTION 527
+#define IDC_SLIDER_GWSPEED    540
+#define IDC_SLIDER_GWLEN      541
+#define IDC_SLIDER_GWANGLE    542
+#define IDC_COMBO_GWPATTERN   543
+#define IDC_SLIDER_GWPHASE    544
+#define IDC_COMBO_RWMETHOD    545
+#define IDC_SLIDER_RWSPEED    546
+#define IDC_SLIDER_RWFADE     547
+#define IDC_CHK_RAND_WAVE     548
+#define IDC_SLIDER_RWWSPEED   549
+#define IDC_SLIDER_RWWLEN     550
+#define IDC_SLIDER_RWWANGLE   551
+#define IDC_SLIDER_RWWSTRENGTH 552
 #define IDC_COMBO_AC_TOUCHBAR_MODE 530
 #define IDC_COMBO_AC_TOUCHBAR_DIRECTION 531
 #define IDC_COMBO_BAT_TOUCHBAR_MODE 532
@@ -294,6 +314,38 @@ static volatile LONG g_rippleRandomMode = 1;
 static volatile LONG g_rippleSpeed = 5;
 static volatile LONG g_rippleWidth = 2;
 static volatile LONG g_rainbowSpeed = 6;
+
+#define CHECKER_PATTERN_CHECKER 0
+#define CHECKER_PATTERN_ROW 1
+#define CHECKER_PATTERN_COL 2
+#define CHECKER_DIR_OPPOSITE 0
+#define CHECKER_DIR_SAME 1
+#define CHECKER_DIR_COMPLEMENT 2
+static volatile LONG g_checkerSpeed = 6;
+static volatile LONG g_checkerPattern = CHECKER_PATTERN_CHECKER;
+static volatile LONG g_checkerDirection = CHECKER_DIR_OPPOSITE;
+static volatile LONG g_checkerHueOffset = 0;
+static HWND g_hComboCheckerPattern, g_hComboCheckerDirection, g_hLblCheckerHue;
+
+static volatile LONG g_gridWaveSpeed = 6;
+static volatile LONG g_gridWaveLength = 3;
+static volatile LONG g_gridWaveAngle = 0;
+static volatile LONG g_gridWavePattern = CHECKER_PATTERN_CHECKER;
+static volatile LONG g_gridWavePhase = 180;
+static HWND g_hComboGridWavePattern, g_hLblGridWaveAngle, g_hLblGridWavePhase;
+
+#define RAND_WAVE_SMOOTH 0
+#define RAND_WAVE_HARD 1
+#define RAND_WAVE_DRIFT 2
+static volatile LONG g_randWaveMethod = RAND_WAVE_SMOOTH;
+static volatile LONG g_randWaveSpeed = 6;
+static volatile LONG g_randWaveFade = 8;
+static volatile LONG g_randWaveEnabled = 0;
+static volatile LONG g_randWaveWaveSpeed = 6;
+static volatile LONG g_randWaveWaveLength = 3;
+static volatile LONG g_randWaveWaveAngle = 0;
+static volatile LONG g_randWaveStrength = 60;
+static HWND g_hComboRandWaveMethod, g_hChkRandWave, g_hLblRandWaveAngle, g_hLblRandWaveStrength;
 
 static volatile LONG g_quicksandSpeed = 5;
 static volatile LONG g_quicksandScale = 5;
@@ -457,6 +509,9 @@ static HWND g_panelQuicksand[MAX_PANEL_CTRLS]; static int g_panelQuicksandCount 
 static HWND g_panelCurrent[MAX_PANEL_CTRLS]; static int g_panelCurrentCount = 0;
 static HWND g_panelTouchCurrent[MAX_PANEL_CTRLS]; static int g_panelTouchCurrentCount = 0;
 static HWND g_panelScreenAmbient[MAX_PANEL_CTRLS]; static int g_panelScreenAmbientCount = 0;
+static HWND g_panelCheckerboard[MAX_PANEL_CTRLS]; static int g_panelCheckerboardCount = 0;
+static HWND g_panelGridWave[MAX_PANEL_CTRLS]; static int g_panelGridWaveCount = 0;
+static HWND g_panelRandWave[MAX_PANEL_CTRLS]; static int g_panelRandWaveCount = 0;
 
 #define MAX_UI_PAGE_CTRLS 40
 #define UI_PAGE_EFFECTS 0
@@ -580,6 +635,23 @@ void save_config(void) {
     fprintf(f, "rippleSpeed=%ld\n", (long)g_rippleSpeed);
     fprintf(f, "rippleWidth=%ld\n", (long)g_rippleWidth);
     fprintf(f, "rainbowSpeed=%ld\n", (long)g_rainbowSpeed);
+    fprintf(f, "checkerSpeed=%ld\n", (long)g_checkerSpeed);
+    fprintf(f, "checkerPattern=%ld\n", (long)g_checkerPattern);
+    fprintf(f, "checkerDirection=%ld\n", (long)g_checkerDirection);
+    fprintf(f, "checkerHue=%ld\n", (long)g_checkerHueOffset);
+    fprintf(f, "gridWaveSpeed=%ld\n", (long)g_gridWaveSpeed);
+    fprintf(f, "gridWaveLength=%ld\n", (long)g_gridWaveLength);
+    fprintf(f, "gridWaveAngle=%ld\n", (long)g_gridWaveAngle);
+    fprintf(f, "gridWavePattern=%ld\n", (long)g_gridWavePattern);
+    fprintf(f, "gridWavePhase=%ld\n", (long)g_gridWavePhase);
+    fprintf(f, "randWaveMethod=%ld\n", (long)g_randWaveMethod);
+    fprintf(f, "randWaveSpeed=%ld\n", (long)g_randWaveSpeed);
+    fprintf(f, "randWaveFade=%ld\n", (long)g_randWaveFade);
+    fprintf(f, "randWaveEnabled=%ld\n", (long)g_randWaveEnabled);
+    fprintf(f, "randWaveWaveSpeed=%ld\n", (long)g_randWaveWaveSpeed);
+    fprintf(f, "randWaveWaveLength=%ld\n", (long)g_randWaveWaveLength);
+    fprintf(f, "randWaveWaveAngle=%ld\n", (long)g_randWaveWaveAngle);
+    fprintf(f, "randWaveStrength=%ld\n", (long)g_randWaveStrength);
     fprintf(f, "quicksandSpeed=%ld\n", (long)g_quicksandSpeed);
     fprintf(f, "quicksandScale=%ld\n", (long)g_quicksandScale);
     for (int i = 0; i < 3; i++) fprintf(f, "quicksandColor%d=%ld\n", i, (long)g_quicksandColors[i]);
@@ -796,6 +868,23 @@ void load_config(void) {
         else if (!strcmp(key, "rippleSpeed")) g_rippleSpeed = cfg_clamp(v, 1, 10);
         else if (!strcmp(key, "rippleWidth")) g_rippleWidth = cfg_clamp(v, 1, 4);
         else if (!strcmp(key, "rainbowSpeed")) g_rainbowSpeed = cfg_clamp(v, 1, 20);
+        else if (!strcmp(key, "checkerSpeed")) g_checkerSpeed = cfg_clamp(v, 1, 20);
+        else if (!strcmp(key, "checkerPattern")) g_checkerPattern = cfg_clamp(v, CHECKER_PATTERN_CHECKER, CHECKER_PATTERN_COL);
+        else if (!strcmp(key, "checkerDirection")) g_checkerDirection = cfg_clamp(v, CHECKER_DIR_OPPOSITE, CHECKER_DIR_COMPLEMENT);
+        else if (!strcmp(key, "checkerHue")) g_checkerHueOffset = cfg_clamp(v, 0, 180);
+        else if (!strcmp(key, "gridWaveSpeed")) g_gridWaveSpeed = cfg_clamp(v, 1, 20);
+        else if (!strcmp(key, "gridWaveLength")) g_gridWaveLength = cfg_clamp(v, 1, 10);
+        else if (!strcmp(key, "gridWaveAngle")) g_gridWaveAngle = cfg_clamp(v, 0, 359);
+        else if (!strcmp(key, "gridWavePattern")) g_gridWavePattern = cfg_clamp(v, CHECKER_PATTERN_CHECKER, CHECKER_PATTERN_COL);
+        else if (!strcmp(key, "gridWavePhase")) g_gridWavePhase = cfg_clamp(v, 0, 180);
+        else if (!strcmp(key, "randWaveMethod")) g_randWaveMethod = cfg_clamp(v, RAND_WAVE_SMOOTH, RAND_WAVE_DRIFT);
+        else if (!strcmp(key, "randWaveSpeed")) g_randWaveSpeed = cfg_clamp(v, 1, 20);
+        else if (!strcmp(key, "randWaveFade")) g_randWaveFade = cfg_clamp(v, 1, 20);
+        else if (!strcmp(key, "randWaveEnabled")) g_randWaveEnabled = v ? 1 : 0;
+        else if (!strcmp(key, "randWaveWaveSpeed")) g_randWaveWaveSpeed = cfg_clamp(v, 1, 20);
+        else if (!strcmp(key, "randWaveWaveLength")) g_randWaveWaveLength = cfg_clamp(v, 1, 10);
+        else if (!strcmp(key, "randWaveWaveAngle")) g_randWaveWaveAngle = cfg_clamp(v, 0, 359);
+        else if (!strcmp(key, "randWaveStrength")) g_randWaveStrength = cfg_clamp(v, 0, 100);
         else if (!strcmp(key, "quicksandSpeed")) g_quicksandSpeed = cfg_clamp(v, 1, 10);
         else if (!strcmp(key, "quicksandScale")) g_quicksandScale = cfg_clamp(v, 1, 10);
         else if (!strncmp(key, "quicksandColor", 14) && key[14] >= '0' && key[14] <= '2' && !key[15]) g_quicksandColors[key[14] - '0'] = (COLORREF)v;
@@ -2057,6 +2146,171 @@ DWORD WINAPI effect_rainbow(LPVOID p) {
         unsigned char buf[BUF_SIZE] = {0};
         for (size_t i=0; i<KEYMAP_COUNT; i++)
             set_key(buf, KEYMAP[i].offset, r, g, b);
+        send_frame(buf);
+        pace_frame();
+    }
+    return 0;
+}
+
+/* 把整块键盘按奇偶分成两个镶嵌网格：每格各自单色，整体沿彩虹循环。
+   两格色相可反向（一个递增一个递减）、同向或相差 180 度互补。 */
+DWORD WINAPI effect_checkerboard(LPVOID p) {
+    (void)p;
+    double phase = 0.0;
+    ULONGLONG previousTick = GetTickCount64();
+    while (!g_stopFlag) {
+        ULONGLONG now = GetTickCount64();
+        double elapsedSeconds = (double)(now - previousTick) / 1000.0;
+        previousTick = now;
+        double degreesPerSecond = 4.0 + (double)g_checkerSpeed * 2.0;
+        phase = fmod(phase + elapsedSeconds * degreesPerSecond, 360.0);
+
+        LONG direction = g_checkerDirection;
+        double offset = (double)g_checkerHueOffset;
+        double hueB;
+        if (direction == CHECKER_DIR_SAME) hueB = phase + offset;
+        else if (direction == CHECKER_DIR_COMPLEMENT) hueB = phase + 180.0 + offset;
+        else hueB = offset - phase;
+
+        unsigned char ar, ag, ab, br, bg, bb;
+        hsv_to_rgb(phase, &ar, &ag, &ab);
+        hsv_to_rgb(hueB, &br, &bg, &bb);
+
+        LONG pattern = g_checkerPattern;
+        unsigned char buf[BUF_SIZE] = {0};
+        for (size_t i=0; i<KEYMAP_COUNT; i++) {
+            const KeyEntry *key = &KEYMAP[i];
+            int parity;
+            if (pattern == CHECKER_PATTERN_ROW) parity = key->row & 1;
+            else if (pattern == CHECKER_PATTERN_COL) parity = key->col & 1;
+            else parity = (key->row + key->col) & 1;
+            if (parity) set_key(buf, key->offset, br, bg, bb);
+            else set_key(buf, key->offset, ar, ag, ab);
+        }
+        send_frame(buf);
+        pace_frame();
+    }
+    return 0;
+}
+
+/* 沿用两个镶嵌网格，但每格沿波浪方向形成流动的彩虹波带：
+   颜色由键位在波浪方向上的投影决定，两格之间再叠加相位差形成交织波带。 */
+DWORD WINAPI effect_grid_wave(LPVOID p) {
+    (void)p;
+    double t = 0.0;
+    while (!g_stopFlag) {
+        double angleRad = (double)g_gridWaveAngle * M_PI / 180.0;
+        double dirX = cos(angleRad), dirY = sin(angleRad);
+        double spatial = 45.0 / (double)g_gridWaveLength;
+        double phaseOffset = (double)g_gridWavePhase;
+        LONG pattern = g_gridWavePattern;
+        unsigned char buf[BUF_SIZE] = {0};
+        for (size_t i=0; i<KEYMAP_COUNT; i++) {
+            const KeyEntry *key = &KEYMAP[i];
+            double x = get_key_x(key);
+            double y = get_key_y(key);
+            double proj = x * dirX + y * dirY;
+            int parity;
+            if (pattern == CHECKER_PATTERN_ROW) parity = key->row & 1;
+            else if (pattern == CHECKER_PATTERN_COL) parity = key->col & 1;
+            else parity = (key->row + key->col) & 1;
+            double hue = t + proj * spatial + (parity ? phaseOffset : 0.0);
+            unsigned char r, g, b;
+            hsv_to_rgb(hue, &r, &g, &b);
+            set_key(buf, key->offset, r, g, b);
+        }
+        send_frame(buf);
+        t += (double)g_gridWaveSpeed;
+        pace_frame();
+    }
+    return 0;
+}
+
+/* 每键随机取色，可选叠加只调制亮度的波浪（不改变色相）。
+   变化方式可选平滑过渡、硬切换或色相漂移，节奏由随机速度控制。 */
+DWORD WINAPI effect_random_wave(LPVOID p) {
+    (void)p;
+    double curR[KEYMAP_COUNT], curG[KEYMAP_COUNT], curB[KEYMAP_COUNT];
+    double tgtR[KEYMAP_COUNT], tgtG[KEYMAP_COUNT], tgtB[KEYMAP_COUNT];
+    double hue[KEYMAP_COUNT], drift[KEYMAP_COUNT];
+    ULONGLONG nextChange[KEYMAP_COUNT];
+    ULONGLONG startedAt = GetTickCount64();
+    ULONGLONG previousTick = startedAt;
+    for (size_t i=0; i<KEYMAP_COUNT; i++) {
+        unsigned char r, g, b;
+        hsv_to_rgb((double)(rand() % 360), &r, &g, &b);
+        tgtR[i] = r; tgtG[i] = g; tgtB[i] = b;
+        curR[i] = r; curG[i] = g; curB[i] = b;
+        hue[i] = (double)(rand() % 360);
+        drift[i] = ((rand() & 1) ? 1.0 : -1.0) * (20.0 + (double)(rand() % 40));
+        nextChange[i] = startedAt + (ULONGLONG)(rand() % 1500);
+    }
+
+    while (!g_stopFlag) {
+        ULONGLONG now = GetTickCount64();
+        double elapsedSeconds = (double)(now - previousTick) / 1000.0;
+        if (elapsedSeconds > 0.25) elapsedSeconds = 0.25;
+        previousTick = now;
+        double seconds = (double)(now - startedAt) / 1000.0;
+
+        LONG method = g_randWaveMethod;
+        double intervalMs = 2000.0 / (double)g_randWaveSpeed;
+        double fadeStep = (0.5 + (double)g_randWaveFade * 0.5) * elapsedSeconds * 255.0;
+
+        for (size_t i=0; i<KEYMAP_COUNT; i++) {
+            if (method == RAND_WAVE_DRIFT) {
+                hue[i] = fmod(hue[i] + drift[i] * elapsedSeconds, 360.0);
+                if (now >= nextChange[i]) {
+                    nextChange[i] = now + (ULONGLONG)(intervalMs * (0.6 + 0.8 * (double)(rand() % 1000) / 1000.0));
+                    drift[i] = ((rand() & 1) ? 1.0 : -1.0) *
+                        (15.0 + (double)(rand() % 60)) * (0.4 + (double)g_randWaveSpeed * 0.06);
+                }
+                unsigned char r, g, b;
+                hsv_to_rgb(hue[i], &r, &g, &b);
+                curR[i] = r; curG[i] = g; curB[i] = b;
+            } else {
+                if (now >= nextChange[i]) {
+                    nextChange[i] = now + (ULONGLONG)(intervalMs * (0.6 + 0.8 * (double)(rand() % 1000) / 1000.0));
+                    unsigned char r, g, b;
+                    hsv_to_rgb((double)(rand() % 360), &r, &g, &b);
+                    tgtR[i] = r; tgtG[i] = g; tgtB[i] = b;
+                    if (method == RAND_WAVE_HARD) {
+                        curR[i] = tgtR[i]; curG[i] = tgtG[i]; curB[i] = tgtB[i];
+                    }
+                }
+                if (method == RAND_WAVE_SMOOTH) {
+                    if (curR[i] < tgtR[i]) curR[i] = fmin(tgtR[i], curR[i] + fadeStep);
+                    else curR[i] = fmax(tgtR[i], curR[i] - fadeStep);
+                    if (curG[i] < tgtG[i]) curG[i] = fmin(tgtG[i], curG[i] + fadeStep);
+                    else curG[i] = fmax(tgtG[i], curG[i] - fadeStep);
+                    if (curB[i] < tgtB[i]) curB[i] = fmin(tgtB[i], curB[i] + fadeStep);
+                    else curB[i] = fmax(tgtB[i], curB[i] - fadeStep);
+                }
+            }
+        }
+
+        int waveOn = g_randWaveEnabled != 0;
+        double depth = (double)g_randWaveStrength / 100.0;
+        double angleRad = (double)g_randWaveWaveAngle * M_PI / 180.0;
+        double dirX = cos(angleRad), dirY = sin(angleRad);
+        double spatial = 45.0 / (double)g_randWaveWaveLength;
+        double waveRate = 30.0 + (double)g_randWaveWaveSpeed * 20.0;
+        double waveTime = seconds * waveRate;
+
+        unsigned char buf[BUF_SIZE] = {0};
+        for (size_t i=0; i<KEYMAP_COUNT; i++) {
+            double brightness = 1.0;
+            if (waveOn) {
+                double proj = get_key_x(&KEYMAP[i]) * dirX + get_key_y(&KEYMAP[i]) * dirY;
+                double phase = (proj * spatial + waveTime) * M_PI / 180.0;
+                double wave01 = 0.5 + 0.5 * sin(phase);
+                brightness = (1.0 - depth) + depth * wave01;
+            }
+            set_key(buf, KEYMAP[i].offset,
+                (unsigned char)(curR[i] * brightness),
+                (unsigned char)(curG[i] * brightness),
+                (unsigned char)(curB[i] * brightness));
+        }
         send_frame(buf);
         pace_frame();
     }
@@ -4029,6 +4283,9 @@ LPTHREAD_START_ROUTINE mode_to_fn(int mode) {
         case MODE_CURRENT: return effect_current;
         case MODE_TOUCH_CURRENT: return effect_touch_current;
         case MODE_SCREEN_AMBIENT: return effect_screen_ambient;
+        case MODE_CHECKERBOARD: return effect_checkerboard;
+        case MODE_GRID_WAVE: return effect_grid_wave;
+        case MODE_RANDOM_WAVE: return effect_random_wave;
     }
     return NULL;
 }
@@ -4051,6 +4308,9 @@ const wchar_t* mode_to_label(int mode) {
         case MODE_CURRENT: return L"当前模式：电流";
         case MODE_TOUCH_CURRENT: return L"当前模式：触控电流";
         case MODE_SCREEN_AMBIENT: return L"当前模式：同步辨色";
+        case MODE_CHECKERBOARD: return L"当前模式：双格彩虹";
+        case MODE_GRID_WAVE: return L"当前模式：波浪网格";
+        case MODE_RANDOM_WAVE: return L"当前模式：随机彩波";
     }
     return L"当前模式：无";
 }
@@ -4073,6 +4333,9 @@ static const wchar_t* mode_to_name(int mode) {
         case MODE_CURRENT: return L"电流";
         case MODE_TOUCH_CURRENT: return L"触控电流";
         case MODE_SCREEN_AMBIENT: return L"同步辨色";
+        case MODE_CHECKERBOARD: return L"双格彩虹";
+        case MODE_GRID_WAVE: return L"波浪网格";
+        case MODE_RANDOM_WAVE: return L"随机彩波";
     }
     return L"关闭";
 }
@@ -4145,6 +4408,9 @@ void show_panel_for_mode(int mode) {
     show_only(g_panelCurrent, g_panelCurrentCount, visibleMode == MODE_CURRENT);
     show_only(g_panelTouchCurrent, g_panelTouchCurrentCount, visibleMode == MODE_TOUCH_CURRENT);
     show_only(g_panelScreenAmbient, g_panelScreenAmbientCount, visibleMode == MODE_SCREEN_AMBIENT);
+    show_only(g_panelCheckerboard, g_panelCheckerboardCount, visibleMode == MODE_CHECKERBOARD);
+    show_only(g_panelGridWave, g_panelGridWaveCount, visibleMode == MODE_GRID_WAVE);
+    show_only(g_panelRandWave, g_panelRandWaveCount, visibleMode == MODE_RANDOM_WAVE);
     HWND top = GetAncestor(g_panelBreath[0], GA_ROOT);
     if (top) { InvalidateRect(top, NULL, TRUE); UpdateWindow(top); }
 }
@@ -4819,6 +5085,101 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g_panelScreenAmbient[g_panelScreenAmbientCount++] = mk_label(hwnd,
                 L"线性光混色 + 空间模糊 + 时间平滑", 20, 285, 340, 25);
 
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_label(hwnd,
+                L"键盘按奇偶分为两个镶嵌网格，每格各自单色，整体沿彩虹循环；\n两格光谱方向相反时互相追逐。",
+                20, 105, 340, 40);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_label(hwnd, L"变色速度：", 20, 150, 150, 20);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_slider(hwnd, IDC_SLIDER_CBSPEED, 20, 170, 340, 30, 1, 20, g_checkerSpeed);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_label(hwnd, L"网格花样：", 20, 210, 200, 20);
+            g_hComboCheckerPattern = CreateWindow(L"COMBOBOX", L"", WS_CHILD|CBS_DROPDOWNLIST|WS_VSCROLL,
+                20, 230, 340, 110, hwnd, (HMENU)IDC_COMBO_CBPATTERN, NULL, NULL);
+            SendMessage(g_hComboCheckerPattern, CB_ADDSTRING, 0, (LPARAM)L"棋盘交错");
+            SendMessage(g_hComboCheckerPattern, CB_ADDSTRING, 0, (LPARAM)L"横向交替");
+            SendMessage(g_hComboCheckerPattern, CB_ADDSTRING, 0, (LPARAM)L"纵向交替");
+            SendMessage(g_hComboCheckerPattern, CB_SETCURSEL, (WPARAM)g_checkerPattern, 0);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = g_hComboCheckerPattern;
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_label(hwnd, L"光谱方向：", 20, 270, 200, 20);
+            g_hComboCheckerDirection = CreateWindow(L"COMBOBOX", L"", WS_CHILD|CBS_DROPDOWNLIST|WS_VSCROLL,
+                20, 290, 340, 110, hwnd, (HMENU)IDC_COMBO_CBDIRECTION, NULL, NULL);
+            SendMessage(g_hComboCheckerDirection, CB_ADDSTRING, 0, (LPARAM)L"两格反向");
+            SendMessage(g_hComboCheckerDirection, CB_ADDSTRING, 0, (LPARAM)L"两格同向");
+            SendMessage(g_hComboCheckerDirection, CB_ADDSTRING, 0, (LPARAM)L"互补色（相差180度）");
+            SendMessage(g_hComboCheckerDirection, CB_SETCURSEL, (WPARAM)g_checkerDirection, 0);
+            g_panelCheckerboard[g_panelCheckerboardCount++] = g_hComboCheckerDirection;
+            {
+                wchar_t hueLabel[64];
+                wsprintf(hueLabel, L"两格色相偏移：%d 度", (int)g_checkerHueOffset);
+                g_hLblCheckerHue = mk_label(hwnd, hueLabel, 20, 330, 340, 20);
+            }
+            g_panelCheckerboard[g_panelCheckerboardCount++] = g_hLblCheckerHue;
+            g_panelCheckerboard[g_panelCheckerboardCount++] = mk_slider(hwnd, IDC_SLIDER_CBHUE, 20, 350, 340, 30, 0, 180, g_checkerHueOffset);
+
+            g_panelGridWave[g_panelGridWaveCount++] = mk_label(hwnd,
+                L"沿用两个镶嵌网格，每格沿波浪方向形成流动的彩虹波带；\n两格相位差让波带交织错开。",
+                20, 105, 340, 40);
+            g_panelGridWave[g_panelGridWaveCount++] = mk_label(hwnd, L"速度：", 20, 150, 120, 20);
+            g_panelGridWave[g_panelGridWaveCount++] = mk_label(hwnd, L"波长（越大越疏）：", 200, 150, 160, 20);
+            g_panelGridWave[g_panelGridWaveCount++] = mk_slider(hwnd, IDC_SLIDER_GWSPEED, 20, 170, 165, 30, 1, 20, g_gridWaveSpeed);
+            g_panelGridWave[g_panelGridWaveCount++] = mk_slider(hwnd, IDC_SLIDER_GWLEN, 200, 170, 160, 30, 1, 10, g_gridWaveLength);
+            {
+                wchar_t angleLabel[64];
+                wsprintf(angleLabel, L"波浪角度：%d 度", (int)g_gridWaveAngle);
+                g_hLblGridWaveAngle = mk_label(hwnd, angleLabel, 20, 210, 340, 20);
+            }
+            g_panelGridWave[g_panelGridWaveCount++] = g_hLblGridWaveAngle;
+            g_panelGridWave[g_panelGridWaveCount++] = mk_slider(hwnd, IDC_SLIDER_GWANGLE, 20, 230, 340, 30, 0, 359, g_gridWaveAngle);
+            g_panelGridWave[g_panelGridWaveCount++] = mk_label(hwnd, L"网格花样：", 20, 270, 120, 20);
+            {
+                wchar_t phaseLabel[64];
+                wsprintf(phaseLabel, L"两格相位差：%d 度", (int)g_gridWavePhase);
+                g_hLblGridWavePhase = mk_label(hwnd, phaseLabel, 200, 270, 160, 20);
+            }
+            g_panelGridWave[g_panelGridWaveCount++] = g_hLblGridWavePhase;
+            g_hComboGridWavePattern = CreateWindow(L"COMBOBOX", L"", WS_CHILD|CBS_DROPDOWNLIST|WS_VSCROLL,
+                20, 290, 160, 110, hwnd, (HMENU)IDC_COMBO_GWPATTERN, NULL, NULL);
+            SendMessage(g_hComboGridWavePattern, CB_ADDSTRING, 0, (LPARAM)L"棋盘交错");
+            SendMessage(g_hComboGridWavePattern, CB_ADDSTRING, 0, (LPARAM)L"横向交替");
+            SendMessage(g_hComboGridWavePattern, CB_ADDSTRING, 0, (LPARAM)L"纵向交替");
+            SendMessage(g_hComboGridWavePattern, CB_SETCURSEL, (WPARAM)g_gridWavePattern, 0);
+            g_panelGridWave[g_panelGridWaveCount++] = g_hComboGridWavePattern;
+            g_panelGridWave[g_panelGridWaveCount++] = mk_slider(hwnd, IDC_SLIDER_GWPHASE, 200, 290, 160, 30, 0, 180, g_gridWavePhase);
+
+            g_panelRandWave[g_panelRandWaveCount++] = mk_label(hwnd,
+                L"每个键随机取色；可再叠加一层只改变亮度的波浪，颜色不受影响。",
+                20, 105, 340, 40);
+            g_panelRandWave[g_panelRandWaveCount++] = mk_label(hwnd, L"变化方式：", 20, 146, 120, 18);
+            g_panelRandWave[g_panelRandWaveCount++] = mk_label(hwnd, L"变化速度：", 200, 146, 160, 18);
+            g_hComboRandWaveMethod = CreateWindow(L"COMBOBOX", L"", WS_CHILD|CBS_DROPDOWNLIST|WS_VSCROLL,
+                20, 166, 165, 120, hwnd, (HMENU)IDC_COMBO_RWMETHOD, NULL, NULL);
+            SendMessage(g_hComboRandWaveMethod, CB_ADDSTRING, 0, (LPARAM)L"平滑过渡");
+            SendMessage(g_hComboRandWaveMethod, CB_ADDSTRING, 0, (LPARAM)L"硬切换");
+            SendMessage(g_hComboRandWaveMethod, CB_ADDSTRING, 0, (LPARAM)L"色相漂移");
+            SendMessage(g_hComboRandWaveMethod, CB_SETCURSEL, (WPARAM)g_randWaveMethod, 0);
+            g_panelRandWave[g_panelRandWaveCount++] = g_hComboRandWaveMethod;
+            g_panelRandWave[g_panelRandWaveCount++] = mk_slider(hwnd, IDC_SLIDER_RWSPEED, 200, 166, 160, 30, 1, 20, g_randWaveSpeed);
+            g_panelRandWave[g_panelRandWaveCount++] = mk_label(hwnd, L"过渡速度：", 20, 200, 160, 18);
+            g_hChkRandWave = CreateWindow(L"BUTTON", L"叠加亮度波浪", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX,
+                200, 198, 160, 24, hwnd, (HMENU)IDC_CHK_RAND_WAVE, NULL, NULL);
+            CheckDlgButton(hwnd, IDC_CHK_RAND_WAVE, g_randWaveEnabled ? BST_CHECKED : BST_UNCHECKED);
+            g_panelRandWave[g_panelRandWaveCount++] = g_hChkRandWave;
+            g_panelRandWave[g_panelRandWaveCount++] = mk_slider(hwnd, IDC_SLIDER_RWFADE, 20, 220, 165, 30, 1, 20, g_randWaveFade);
+            g_panelRandWave[g_panelRandWaveCount++] = mk_label(hwnd, L"波浪速度：", 20, 254, 160, 18);
+            g_panelRandWave[g_panelRandWaveCount++] = mk_label(hwnd, L"波浪波长：", 200, 254, 160, 18);
+            g_panelRandWave[g_panelRandWaveCount++] = mk_slider(hwnd, IDC_SLIDER_RWWSPEED, 20, 274, 165, 30, 1, 20, g_randWaveWaveSpeed);
+            g_panelRandWave[g_panelRandWaveCount++] = mk_slider(hwnd, IDC_SLIDER_RWWLEN, 200, 274, 160, 30, 1, 10, g_randWaveWaveLength);
+            {
+                wchar_t angleLabel[64];
+                wsprintf(angleLabel, L"角度：%d 度", (int)g_randWaveWaveAngle);
+                g_hLblRandWaveAngle = mk_label(hwnd, angleLabel, 20, 308, 165, 18);
+                wchar_t strengthLabel[64];
+                wsprintf(strengthLabel, L"强度：%d%%", (int)g_randWaveStrength);
+                g_hLblRandWaveStrength = mk_label(hwnd, strengthLabel, 200, 308, 160, 18);
+            }
+            g_panelRandWave[g_panelRandWaveCount++] = g_hLblRandWaveAngle;
+            g_panelRandWave[g_panelRandWaveCount++] = g_hLblRandWaveStrength;
+            g_panelRandWave[g_panelRandWaveCount++] = mk_slider(hwnd, IDC_SLIDER_RWWANGLE, 20, 328, 165, 30, 0, 359, g_randWaveWaveAngle);
+            g_panelRandWave[g_panelRandWaveCount++] = mk_slider(hwnd, IDC_SLIDER_RWWSTRENGTH, 200, 328, 160, 30, 0, 100, g_randWaveStrength);
+
             add_page_control(g_pageEffects, &g_pageEffectsCount,
                 mk_label(hwnd, L"当前灯效亮度：", 390, 125, 250, 20));
             g_hSliderBright = mk_slider(hwnd, IDC_SLIDER_BRIGHT, 390, 145, 310, 30, 0, 100, g_brightness);
@@ -5145,6 +5506,43 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RIPSPEED) g_rippleSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RIPWIDTH) g_rippleWidth = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RBWSPEED) g_rainbowSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_CBSPEED) g_checkerSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_CBHUE) {
+                g_checkerHueOffset = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+                wchar_t buf[64];
+                wsprintf(buf, L"两格色相偏移：%d 度", (int)g_checkerHueOffset);
+                SetWindowText(g_hLblCheckerHue, buf);
+            }
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_GWSPEED) g_gridWaveSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_GWLEN) g_gridWaveLength = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_GWANGLE) {
+                g_gridWaveAngle = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+                wchar_t buf[64];
+                wsprintf(buf, L"波浪角度：%d 度", (int)g_gridWaveAngle);
+                SetWindowText(g_hLblGridWaveAngle, buf);
+            }
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_GWPHASE) {
+                g_gridWavePhase = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+                wchar_t buf[64];
+                wsprintf(buf, L"两格相位差：%d 度", (int)g_gridWavePhase);
+                SetWindowText(g_hLblGridWavePhase, buf);
+            }
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RWSPEED) g_randWaveSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RWFADE) g_randWaveFade = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RWWSPEED) g_randWaveWaveSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RWWLEN) g_randWaveWaveLength = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RWWANGLE) {
+                g_randWaveWaveAngle = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+                wchar_t buf[64];
+                wsprintf(buf, L"角度：%d 度", (int)g_randWaveWaveAngle);
+                SetWindowText(g_hLblRandWaveAngle, buf);
+            }
+            else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_RWWSTRENGTH) {
+                g_randWaveStrength = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
+                wchar_t buf[64];
+                wsprintf(buf, L"强度：%d%%", (int)g_randWaveStrength);
+                SetWindowText(g_hLblRandWaveStrength, buf);
+            }
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_QSSPEED) g_quicksandSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_QSSCALE) g_quicksandScale = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
             else if (GetDlgCtrlID(ctrl) == IDC_SLIDER_CURSPEED) g_currentSpeed = (LONG)SendMessage(ctrl, TBM_GETPOS, 0, 0);
@@ -5226,6 +5624,26 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_batteryMode = cfg_clamp(sel - 1, -1, MODE_COUNT - 1);
                 if (g_autoPowerProfiles && !g_onAcPower) apply_power_profile(0, 1);
                 else save_config();
+                return 0;
+            }
+            if (HIWORD(wp) == CBN_SELCHANGE && (HWND)lp == g_hComboCheckerPattern) {
+                g_checkerPattern = cfg_clamp((LONG)SendMessage(g_hComboCheckerPattern, CB_GETCURSEL, 0, 0), CHECKER_PATTERN_CHECKER, CHECKER_PATTERN_COL);
+                save_config();
+                return 0;
+            }
+            if (HIWORD(wp) == CBN_SELCHANGE && (HWND)lp == g_hComboCheckerDirection) {
+                g_checkerDirection = cfg_clamp((LONG)SendMessage(g_hComboCheckerDirection, CB_GETCURSEL, 0, 0), CHECKER_DIR_OPPOSITE, CHECKER_DIR_COMPLEMENT);
+                save_config();
+                return 0;
+            }
+            if (HIWORD(wp) == CBN_SELCHANGE && (HWND)lp == g_hComboGridWavePattern) {
+                g_gridWavePattern = cfg_clamp((LONG)SendMessage(g_hComboGridWavePattern, CB_GETCURSEL, 0, 0), CHECKER_PATTERN_CHECKER, CHECKER_PATTERN_COL);
+                save_config();
+                return 0;
+            }
+            if (HIWORD(wp) == CBN_SELCHANGE && (HWND)lp == g_hComboRandWaveMethod) {
+                g_randWaveMethod = cfg_clamp((LONG)SendMessage(g_hComboRandWaveMethod, CB_GETCURSEL, 0, 0), RAND_WAVE_SMOOTH, RAND_WAVE_DRIFT);
+                save_config();
                 return 0;
             }
             if (HIWORD(wp) == CBN_SELCHANGE && (HWND)lp == g_hComboAcTouchbarMode) {
@@ -5455,6 +5873,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     break;
                 case IDC_CHK_WHEEL_REVERSE:
                     g_wheelReverse = (IsDlgButtonChecked(hwnd, IDC_CHK_WHEEL_REVERSE) == BST_CHECKED) ? 1 : 0;
+                    break;
+                case IDC_CHK_RAND_WAVE:
+                    g_randWaveEnabled = (IsDlgButtonChecked(hwnd, IDC_CHK_RAND_WAVE) == BST_CHECKED) ? 1 : 0;
+                    save_config();
                     break;
                 case IDC_RADIO_SHORT:  g_reactiveDuration = 10; break;
                 case IDC_RADIO_MEDIUM: g_reactiveDuration = 20; break;
